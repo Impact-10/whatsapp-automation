@@ -6,3 +6,5 @@ npm-debug.log*
 tools/
 automation-system/sessions/
 automation-system/node_modules/
+
+automation-system/.wwebjs_cache/
