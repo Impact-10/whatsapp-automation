@@ -1,0 +1,8 @@
+node_modules/
+.wweb-session/
+.env
+service-account.json
+npm-debug.log*
+tools/
+automation-system/sessions/
+automation-system/node_modules/

@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pet Clinic — Admin Login</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f1f5f9;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .card {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      padding: 40px;
+      width: 100%;
+      max-width: 400px;
+      box-shadow: 0 4px 24px rgba(0,0,0,.07);
+    }
+    .logo {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .logo h1 { font-size: 20px; font-weight: 800; color: #1e293b; }
+    .logo p  { font-size: 13px; color: #64748b; margin-top: 4px; }
+
+    h2 { font-size: 16px; font-weight: 700; color: #1e293b; margin-bottom: 20px; text-align: center; }
+
+    label { display: block; font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 5px; }
+    input[type="text"], input[type="password"] {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      font-size: 14px;
+      color: #1e293b;
+      outline: none;
+      transition: border-color .15s;
+      margin-bottom: 16px;
+    }
+    input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.15); }
+
+    .btn {
+      width: 100%;
+      padding: 11px;
+      background: #3b82f6;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity .15s;
+    }
+    .btn:hover:not(:disabled) { opacity: .88; }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+    #error-msg {
+      background: #fee2e2;
+      color: #991b1b;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 13px;
+      margin-bottom: 16px;
+      display: none;
+    }
+    #success-msg {
+      background: #dcfce7;
+      color: #166534;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 13px;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    #hint {
+      font-size: 12px;
+      color: #64748b;
+      text-align: center;
+      margin-top: 16px;
+    }
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,.4);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">
+    <h1>🐾 Pet Clinic</h1>
+    <p>Automation System</p>
+  </div>
+
+  <h2 id="form-title">Admin Login</h2>
+
+  <div id="error-msg"></div>
+  <div id="success-msg"></div>
+
+  <form id="auth-form" onsubmit="submitForm(event)">
+    <label for="email">Admin Email</label>
+    <input type="text" id="email" name="email" autocomplete="username" required placeholder="admin@company.com">
+
+    <label for="password">Password</label>
+    <input type="password" id="password" name="password" autocomplete="current-password" required placeholder="••••••••">
+
+    <button class="btn" type="submit" id="submit-btn">Login</button>
+  </form>
+
+  <p id="hint"></p>
+</div>
+
+<script>
+  async function checkStatus() {
+    try {
+      const r = await fetch("/auth/status");
+      const d = await r.json();
+      if (!d.hasAdmins) {
+        document.getElementById("hint").textContent = "No admin configured yet. Set ADMIN_SEED_EMAIL and ADMIN_SEED_PASSWORD in Render env vars, redeploy once, then login here.";
+      } else {
+        document.getElementById("hint").textContent = "Only emails present in the admins table can login.";
+      }
+    } catch {
+      showError("Could not reach server. Is it running?");
+    }
+  }
+
+  async function submitForm(e) {
+    e.preventDefault();
+    hideMessages();
+    const btn = document.getElementById("submit-btn");
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Logging in...';
+
+    const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value;
+
+    try {
+      const r = await fetch("/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const d = await r.json();
+      if (!d.ok) {
+        showError(d.error || "An error occurred.");
+      } else {
+        window.location.href = "/admin";
+      }
+    } catch (err) {
+      showError("Network error: " + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Login";
+    }
+  }
+
+  function showError(msg) {
+    const el = document.getElementById("error-msg");
+    el.textContent = msg;
+    el.style.display = "block";
+    document.getElementById("success-msg").style.display = "none";
+  }
+  function showSuccess(msg) {
+    const el = document.getElementById("success-msg");
+    el.textContent = msg;
+    el.style.display = "block";
+    document.getElementById("error-msg").style.display = "none";
+  }
+  function hideMessages() {
+    document.getElementById("error-msg").style.display = "none";
+    document.getElementById("success-msg").style.display = "none";
+  }
+
+  checkStatus();
+</script>
+</body>
+</html>

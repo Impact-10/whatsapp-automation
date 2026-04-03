@@ -1,0 +1,39 @@
+{
+  "name": "automation-system",
+  "version": "1.0.0",
+  "description": "Production-ready WhatsApp reminder automation using Google Sheets, PostgreSQL, cron, and WhatsApp Web.",
+  "main": "backend/app.js",
+  "scripts": {
+    "start": "node backend/app.js",
+    "prod": "npx pm2 start ecosystem.config.js",
+    "prod:stop": "npx pm2 stop pet-clinic-automation",
+    "prod:restart": "npx pm2 restart pet-clinic-automation",
+    "prod:logs": "npx pm2 logs pet-clinic-automation",
+    "prod:status": "npx pm2 status",
+    "test:send": "node backend/testSend.js",
+    "run:once": "node backend/app.js --run-now"
+  },
+  "engines": {
+    "node": ">=20 <21"
+  },
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "fs-extra": "^11.3.0",
+    "googleapis": "^140.0.1",
+    "jsonwebtoken": "^9.0.2",
+    "node-cron": "^3.0.3",
+    "pg": "^8.13.1",
+    "pm2": "^6.0.14",
+    "puppeteer": "^24.10.0",
+    "qrcode": "^1.5.4",
+    "qrcode-terminal": "^0.12.0",
+    "unzipper": "^0.12.3",
+    "whatsapp-web.js": "^1.27.0"
+  }
+}

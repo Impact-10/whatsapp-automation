@@ -1,0 +1,64 @@
+services:
+  - type: web
+    name: pet-clinic-automation
+    runtime: docker
+    dockerfilePath: ./automation-system/Dockerfile
+    dockerContext: ./automation-system
+    plan: starter           # $7/month — always-on (no spin-down)
+    autoDeploy: false       # Deploy manually to avoid disrupting WhatsApp session
+
+    envVars:
+      # ── Required — set these in the Render dashboard ──────────────────────
+      - key: DATABASE_URL
+        sync: false         # Paste your Neon connection string
+
+      - key: GOOGLE_SERVICE_ACCOUNT_JSON
+        sync: false         # Paste the full contents of service-account.json
+
+      - key: SHEET_ID
+        sync: false         # Your Google Sheet ID
+
+      - key: JWT_SECRET
+        generateValue: true # Auto-generated strong secret
+
+      - key: ADMIN_SEED_EMAIL
+        sync: false         # Optional: first admin email (created on startup if missing)
+
+      - key: ADMIN_SEED_PASSWORD
+        sync: false         # Optional: first admin password (hashed server-side)
+
+      # ── Optional overrides ─────────────────────────────────────────────────
+      - key: SHEET_RANGE
+        value: "Sheet1!A:G"
+
+      - key: CRON_SCHEDULE
+        value: "0 9 * * *"   # 9 AM daily
+
+      - key: APP_TIMEZONE
+        value: "Asia/Kolkata"
+
+      - key: WHATSAPP_SESSION_PATH
+        value: "/tmp/sessions"
+
+      - key: WHATSAPP_CLIENT_ID
+        value: "default"
+
+      - key: WHATSAPP_REMOTE_BACKUP_INTERVAL_MS
+        value: "300000"       # 5 minutes
+
+      - key: WORKER_POLL_INTERVAL_MS
+        value: "5000"
+
+      - key: MAX_SEND_RETRIES
+        value: "3"
+
+      - key: API_PORT
+        value: "3000"
+
+      - key: PUPPETEER_HEADLESS
+        value: "true"
+
+      - key: NODE_ENV
+        value: "production"
+
+    healthCheckPath: /health

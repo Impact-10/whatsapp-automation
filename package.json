@@ -1,0 +1,21 @@
+{
+  "name": "whatsapp-reminder-automation",
+  "version": "1.0.0",
+  "description": "Automated WhatsApp reminder system using Google Sheets, PostgreSQL (Neon), and cron jobs.",
+  "main": "backend/app.js",
+  "scripts": {
+    "start": "node backend/app.js",
+    "sync:sheets": "node backend/app.js --sync-only",
+    "test:whatsapp": "node backend/testMode.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "googleapis": "^140.0.1",
+    "node-cron": "^3.0.3",
+    "pg": "^8.13.1",
+    "puppeteer": "^24.10.0"
+  }
+}
