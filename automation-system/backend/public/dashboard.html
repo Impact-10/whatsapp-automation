@@ -339,6 +339,15 @@
     try { return new Date(v).toLocaleDateString("en-IN", {day:"2-digit",month:"short",year:"numeric"}); } catch { return v; }
   }
 
+  function dateKeyLocal(v) {
+    const d = v ? new Date(v) : new Date();
+    if (Number.isNaN(d.getTime())) return null;
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+
   async function api(path, opts = {}) {
     const r = await fetch(path, { headers: { "Content-Type": "application/json" }, ...opts });
     if (r.status === 401) { window.location.href = "/login"; return null; }
@@ -414,8 +423,8 @@
   }
 
   function recordStatusBadge(r) {
-    const today = new Date().toISOString().slice(0, 10);
-    const due = r.next_due_date ? String(r.next_due_date).slice(0, 10) : null;
+    const today = dateKeyLocal();
+    const due = dateKeyLocal(r.next_due_date);
     if (r.visited) return '<span class="badge b-visited">Visited</span>';
     if (r.follow_up_count > 0) return '<span class="badge b-followup">Follow-up ' + r.follow_up_count + '</span>';
     if (due && due <= today) return '<span class="badge b-due">Due</span>';
@@ -451,8 +460,8 @@
   }
 
   function visitStatusBadge(r) {
-    const today = new Date().toISOString().slice(0, 10);
-    const due = r.next_due_date ? String(r.next_due_date).slice(0, 10) : null;
+    const today = dateKeyLocal();
+    const due = dateKeyLocal(r.next_due_date);
     if (r.visited) return '<span class="badge b-visited">Visited ✓</span>';
     if (r.follow_up_count > 0) return '<span class="badge b-followup">Overdue · Follow-up ' + r.follow_up_count + '/3</span>';
     if (due && due <= today) return '<span class="badge b-due">Due / Overdue</span>';
