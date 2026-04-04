@@ -30,7 +30,7 @@ async function upsertPet(clientId, petName) {
 async function upsertReminder(petId, vaccine, firstVisitDate, frequencyDays) {
   const { rows } = await query(
     `INSERT INTO reminders (pet_id, vaccine, first_visit_date, frequency_days, next_due_date)
-     VALUES ($1, $2, $3, $4, $3::date + ($4 * INTERVAL '1 day'))
+     VALUES ($1, $2, $3::DATE, $4::INT, $3::DATE + ($4::INT * INTERVAL '1 day'))
      ON CONFLICT (pet_id, vaccine) DO UPDATE SET
        first_visit_date = EXCLUDED.first_visit_date,
        frequency_days   = EXCLUDED.frequency_days,
@@ -296,8 +296,8 @@ async function getAllReminders() {
 async function updateFrequency(reminderId, frequencyDays) {
   const { rows } = await query(
     `UPDATE reminders
-     SET frequency_days = $2,
-         next_due_date  = COALESCE(last_visited_date, first_visit_date) + ($2 * INTERVAL '1 day'),
+     SET frequency_days = $2::INT,
+         next_due_date  = COALESCE(last_visited_date, first_visit_date) + ($2::INT * INTERVAL '1 day'),
          follow_up_count = 0
      WHERE id = $1
      RETURNING id, next_due_date, frequency_days`,

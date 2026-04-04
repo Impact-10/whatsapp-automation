@@ -10,6 +10,15 @@ const REQUIRED_HEADERS = [
   "First Visit Date",
 ];
 
+const REQUIRED_HEADER_ALIASES = {
+  "Owner Name": ["Owner Name"],
+  "Phone": ["Phone"],
+  "Pet Name": ["Pet Name"],
+  "Vaccine": ["Vaccine"],
+  // Backward-compatible: support old sheet templates that used Next Due Date.
+  "First Visit Date": ["First Visit Date", "Next Due Date"],
+};
+
 const OPTIONAL_HEADERS = [
   "Frequency Days",
   "Last Visited Date",
@@ -135,11 +144,23 @@ function buildHeaderIndex(headerRow) {
   return index;
 }
 
+function resolveHeaderIndex(index, names) {
+  for (const name of names) {
+    const hit = index[normalizeHeader(name)];
+    if (hit !== undefined) return hit;
+  }
+  return undefined;
+}
+
 function assertHeaders(headerRow) {
   const index = buildHeaderIndex(headerRow);
-  const missing = REQUIRED_HEADERS.filter((h) => index[normalizeHeader(h)] === undefined);
+  const missing = REQUIRED_HEADERS.filter(
+    (h) => resolveHeaderIndex(index, REQUIRED_HEADER_ALIASES[h] || [h]) === undefined
+  );
   if (missing.length) {
-    throw new Error(`Invalid sheet headers. Missing: ${missing.join(" | ")}`);
+    throw new Error(
+      `Invalid sheet headers. Missing: ${missing.join(" | ")}. Found: ${headerRow.join(" | ")}`
+    );
   }
   return index;
 }
@@ -160,6 +181,10 @@ async function fetchSheetRows() {
   }
 
   const headerIndex = assertHeaders(values[0]);
+  const firstVisitIndex = resolveHeaderIndex(
+    headerIndex,
+    REQUIRED_HEADER_ALIASES["First Visit Date"]
+  );
   const freqIndex = headerIndex[normalizeHeader("Frequency Days")];
   const lastVisitedIndex = headerIndex[normalizeHeader("Last Visited Date")];
 
@@ -170,7 +195,7 @@ async function fetchSheetRows() {
       const phone = row[headerIndex[normalizeHeader("Phone")]];
       const petName = row[headerIndex[normalizeHeader("Pet Name")]];
       const vaccine = row[headerIndex[normalizeHeader("Vaccine")]];
-      const firstVisitDate = row[headerIndex[normalizeHeader("First Visit Date")]];
+      const firstVisitDate = row[firstVisitIndex];
       const freqRaw = freqIndex !== undefined ? row[freqIndex] : null;
       const lastVisitedRaw = lastVisitedIndex !== undefined ? row[lastVisitedIndex] : null;
 
@@ -207,6 +232,10 @@ async function listSheetRows() {
   }
 
   const headerIndex = assertHeaders(values[0]);
+  const firstVisitIndex = resolveHeaderIndex(
+    headerIndex,
+    REQUIRED_HEADER_ALIASES["First Visit Date"]
+  );
   const freqIndex = headerIndex[normalizeHeader("Frequency Days")];
   const lastVisitedIndex = headerIndex[normalizeHeader("Last Visited Date")];
 
@@ -215,7 +244,7 @@ async function listSheetRows() {
     const phone = row[headerIndex[normalizeHeader("Phone")]];
     const petName = row[headerIndex[normalizeHeader("Pet Name")]];
     const vaccine = row[headerIndex[normalizeHeader("Vaccine")]];
-    const firstVisitDate = row[headerIndex[normalizeHeader("First Visit Date")]];
+    const firstVisitDate = row[firstVisitIndex];
     const freqRaw = freqIndex !== undefined ? row[freqIndex] : "";
     const lastVisitedRaw = lastVisitedIndex !== undefined ? row[lastVisitedIndex] : "";
 
