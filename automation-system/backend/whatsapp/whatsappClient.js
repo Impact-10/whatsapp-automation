@@ -13,6 +13,7 @@ let ready = false;
 let reconnecting = false;
 let statusMessage = "not_initialized";
 let backupIntervalRef = null;
+let initRecoveryAttempted = false;
 
 // Prevent EBUSY or other unhandled rejections from crashing the process during session backup.
 process.on("unhandledRejection", (reason) => {
@@ -56,6 +57,9 @@ function createClient() {
   const store = new PostgresSessionStore({ queryFn: query });
   const dataPath = path.resolve(process.cwd(), process.env.WHATSAPP_SESSION_PATH || "./sessions");
   const clientId = process.env.WHATSAPP_CLIENT_ID || "default";
+
+  // Ensure data directory exists in ephemeral container environments (Render, Docker, etc.)
+  fs.mkdirSync(dataPath, { recursive: true });
 
   const authStrategy = new RemoteAuth({
     clientId,
@@ -188,6 +192,7 @@ function createClient() {
     latestQr = null;
     ready = true;
     reconnecting = false;
+    initRecoveryAttempted = false;
     statusMessage = "ready";
     logger.info("WhatsApp client ready. Session restored or authenticated.");
   });
@@ -224,7 +229,7 @@ function createClient() {
     }, 5000);
   });
 
-  return { client };
+  return { client, dataPath, clientId };
 }
 
 async function startWhatsAppClient() {
@@ -232,13 +237,47 @@ async function startWhatsAppClient() {
     return clientInstance;
   }
 
-  const { client } = createClient();
+  const { client, dataPath, clientId } = createClient();
   clientInstance = client;
   statusMessage = "initializing";
 
-  client.initialize().catch((error) => {
+  client.initialize().catch(async (error) => {
     ready = false;
-    statusMessage = `init_error:${error.message}`;
+    const message = String(error?.message || "");
+
+    // One-time recovery for missing RemoteAuth zip path in fresh containers.
+    if (
+      !initRecoveryAttempted &&
+      (error?.code === "ENOENT" || message.includes("RemoteAuth-") || message.includes(".zip"))
+    ) {
+      initRecoveryAttempted = true;
+      statusMessage = "recovering_missing_session";
+      logger.warn("WhatsApp init hit missing session artifact. Retrying with clean local auth cache.", {
+        error: message,
+      });
+
+      try {
+        await fs.promises.mkdir(dataPath, { recursive: true });
+        const sessionName = sessionNameFromClientId(clientId);
+        await fs.promises.rm(path.join(dataPath, `${sessionName}.zip`), { force: true });
+      } catch {
+        // no-op: recovery continues even if local cleanup has nothing to remove
+      }
+
+      if (clientInstance === client) {
+        clientInstance = null;
+      }
+
+      setTimeout(() => {
+        startWhatsAppClient().catch((retryError) => {
+          logger.error("WhatsApp retry initialization failed.", { error: retryError.message });
+        });
+      }, 1500);
+
+      return;
+    }
+
+    statusMessage = `init_error:${message}`;
     logger.error("WhatsApp initialization failed.", { error: error.message });
   });
 
