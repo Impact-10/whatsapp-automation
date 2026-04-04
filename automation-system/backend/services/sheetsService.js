@@ -72,10 +72,21 @@ function normalizeDate(rawDate) {
 }
 
 function loadServiceAccountCredentials() {
+  function normalizeCredentials(creds) {
+    if (!creds || typeof creds !== "object") return creds;
+
+    if (typeof creds.private_key === "string") {
+      // Render/UI pastes often keep escaped newlines; OpenSSL expects real newlines.
+      creds.private_key = creds.private_key.replace(/\\n/g, "\n").replace(/\r\n/g, "\n");
+    }
+
+    return creds;
+  }
+
   // Cloud deployments (Render etc.) pass the full JSON as an env var string
   if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
     try {
-      return JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
+      return normalizeCredentials(JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON));
     } catch {
       throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON.");
     }
@@ -87,7 +98,7 @@ function loadServiceAccountCredentials() {
   }
 
   const resolvedPath = path.resolve(process.cwd(), input);
-  return require(resolvedPath);
+  return normalizeCredentials(require(resolvedPath));
 }
 
 function resolveSheetId() {
