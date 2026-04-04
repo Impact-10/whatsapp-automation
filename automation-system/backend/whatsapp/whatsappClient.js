@@ -157,6 +157,9 @@ function createClient() {
 
   const client = new Client({
     authStrategy,
+    webVersionCache: {
+      type: "none",
+    },
     puppeteer: {
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
       headless: String(process.env.PUPPETEER_HEADLESS || "true") === "true",
