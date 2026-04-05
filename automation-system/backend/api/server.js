@@ -117,10 +117,18 @@ function startApiServer() {
   app.use("/admin", apiLimiter);
 
   app.get("/admin/qr", (_req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    res.setHeader("Surrogate-Control", "no-store");
     return res.json({ qr: getLatestQr() });
   });
 
   app.get("/admin/qr/svg", wrap(async (_req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    res.setHeader("Surrogate-Control", "no-store");
     const qr = getLatestQr();
     if (!qr) {
       return res.status(404).json({ ok: false, message: "QR not available. WhatsApp may already be connected." });

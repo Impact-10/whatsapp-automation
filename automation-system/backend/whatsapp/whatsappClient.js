@@ -14,6 +14,15 @@ let reconnecting = false;
 let statusMessage = "not_initialized";
 let backupIntervalRef = null;
 let initRecoveryAttempted = false;
+let initWatchdogRef = null;
+let initStallRecoveries = 0;
+
+function clearInitWatchdog() {
+  if (initWatchdogRef) {
+    clearTimeout(initWatchdogRef);
+    initWatchdogRef = null;
+  }
+}
 
 // Prevent EBUSY or other unhandled rejections from crashing the process during session backup.
 process.on("unhandledRejection", (reason) => {
@@ -174,6 +183,7 @@ function createClient() {
   });
 
   client.on("qr", (qr) => {
+    clearInitWatchdog();
     latestQr = qr;
     ready = false;
     statusMessage = "qr_required";
@@ -192,21 +202,25 @@ function createClient() {
   });
 
   client.on("ready", () => {
+    clearInitWatchdog();
     latestQr = null;
     ready = true;
     reconnecting = false;
     initRecoveryAttempted = false;
+    initStallRecoveries = 0;
     statusMessage = "ready";
     logger.info("WhatsApp client ready. Session restored or authenticated.");
   });
 
   client.on("auth_failure", (message) => {
+    clearInitWatchdog();
     ready = false;
     statusMessage = `auth_failure:${message}`;
     logger.error("WhatsApp auth failure.", { message });
   });
 
   client.on("disconnected", (reason) => {
+    clearInitWatchdog();
     ready = false;
     statusMessage = `disconnected:${reason}`;
     logger.warn("WhatsApp disconnected.", { reason });
@@ -244,7 +258,35 @@ async function startWhatsAppClient() {
   clientInstance = client;
   statusMessage = "initializing";
 
+  clearInitWatchdog();
+  initWatchdogRef = setTimeout(async () => {
+    if (ready || latestQr || clientInstance !== client) return;
+    if (initStallRecoveries >= 2) {
+      statusMessage = "init_stalled";
+      logger.error("WhatsApp init stalled without QR/ready after retries.");
+      return;
+    }
+
+    initStallRecoveries += 1;
+    statusMessage = `init_stalled_retry_${initStallRecoveries}`;
+    logger.warn("WhatsApp init stalled. Restarting client to recover.", { attempt: initStallRecoveries });
+
+    try {
+      if (clientInstance === client) {
+        try { await client.destroy(); } catch { /* no-op */ }
+        clientInstance = null;
+      }
+    } catch {
+      // ignore and retry startup regardless
+    }
+
+    startWhatsAppClient().catch((retryError) => {
+      logger.error("WhatsApp stalled-init recovery failed.", { error: retryError.message });
+    });
+  }, 60000);
+
   client.initialize().catch(async (error) => {
+    clearInitWatchdog();
     ready = false;
     const message = String(error?.message || "");
 
@@ -376,6 +418,7 @@ function getWhatsAppStatus() {
 }
 
 async function closeWhatsAppClient() {
+  clearInitWatchdog();
   if (backupIntervalRef) {
     clearInterval(backupIntervalRef);
     backupIntervalRef = null;

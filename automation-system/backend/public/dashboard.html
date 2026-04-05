@@ -293,6 +293,7 @@
             Open WhatsApp → Linked Devices → Link a Device → Scan QR
           </p>
           <div id="qr-area"><div class="no-qr">Loading QR...</div></div>
+          <div id="qr-timer" style="margin-top:10px;font-size:12px;color:var(--muted);"></div>
         </div>
       </div>
     </div>
@@ -313,6 +314,9 @@
   const POLL_MS = 8000;
   let currentPage = "overview";
   let allReminders = [];
+  let qrRefreshInterval = null;
+  let qrCountdownInterval = null;
+  let qrExpiresAt = 0;
 
   function showPage(name, el) {
     document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
@@ -404,8 +408,13 @@
       ? `Session: ${sess.session_name} · ${(sess.bytes/1024/1024).toFixed(1)} MB · ${sess.healthy ? "Healthy" : "Unhealthy"} · Last backup: ${new Date(sess.updated_at).toLocaleString()}`
       : "No session saved yet.";
     const qrSec = document.getElementById("qr-section");
-    if (!wa.ready && wa.hasQr) { qrSec.style.display = ""; loadQr(); }
-    else qrSec.style.display = "none";
+    if (!wa.ready && wa.hasQr) {
+      qrSec.style.display = "";
+      startQrLoop();
+    } else {
+      qrSec.style.display = "none";
+      stopQrLoop();
+    }
   }
 
   function set(id, val) {
@@ -666,13 +675,56 @@
   }
 
   // ── QR code ─────────────────────────────────────────────────────────────
+  function updateQrTimer() {
+    const el = document.getElementById("qr-timer");
+    if (!el) return;
+    if (!qrExpiresAt) {
+      el.textContent = "";
+      return;
+    }
+    const remaining = Math.max(0, Math.ceil((qrExpiresAt - Date.now()) / 1000));
+    el.textContent = `QR refreshes in ${remaining}s`;
+  }
+
+  function startQrLoop() {
+    if (!qrRefreshInterval) {
+      loadQr();
+      qrRefreshInterval = setInterval(loadQr, 18000);
+    }
+    if (!qrCountdownInterval) {
+      qrCountdownInterval = setInterval(updateQrTimer, 1000);
+    }
+  }
+
+  function stopQrLoop() {
+    if (qrRefreshInterval) {
+      clearInterval(qrRefreshInterval);
+      qrRefreshInterval = null;
+    }
+    if (qrCountdownInterval) {
+      clearInterval(qrCountdownInterval);
+      qrCountdownInterval = null;
+    }
+    qrExpiresAt = 0;
+    updateQrTimer();
+  }
+
   async function loadQr() {
     try {
       const r = await fetch("/admin/qr/svg?ts=" + Date.now());
-      if (!r.ok) { document.getElementById("qr-area").innerHTML = '<div class="no-qr">QR not available yet.</div>'; return; }
+      if (!r.ok) {
+        document.getElementById("qr-area").innerHTML = '<div class="no-qr">QR not available yet.</div>';
+        qrExpiresAt = 0;
+        updateQrTimer();
+        return;
+      }
       document.getElementById("qr-area").innerHTML = await r.text();
+      qrExpiresAt = Date.now() + 20000;
+      updateQrTimer();
     } catch {
       document.getElementById("qr-area").innerHTML = '<div class="no-qr">Failed to load QR.</div>';
+      qrExpiresAt = 0;
+      updateQrTimer();
     }
   }
 
