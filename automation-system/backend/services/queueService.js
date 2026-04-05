@@ -1,43 +1,15 @@
 const { query, withTransaction } = require("../database/db");
 
-async function enqueueMessage({
-  reminderId,
-  phone,
-  message,
-  reminderDate,
-  sendAfterTime = null,
-  timezone = "Asia/Kolkata",
-}) {
-  const hasSendTime = Boolean(sendAfterTime);
-
+async function enqueueMessage({ reminderId, phone, message, reminderDate }) {
   const sql = `
-    INSERT INTO message_queue (reminder_id, phone, message, reminder_date, status, send_after)
-    VALUES (
-      $1,
-      $2,
-      $3,
-      $4,
-      'queued',
-      CASE
-        WHEN $5::BOOLEAN
-          THEN ((CURRENT_TIMESTAMP AT TIME ZONE $6)::DATE::TEXT || ' ' || $7 || ':00')::TIMESTAMP AT TIME ZONE $6
-        ELSE NOW()
-      END
-    )
+    INSERT INTO message_queue (reminder_id, phone, message, reminder_date, status)
+    VALUES ($1, $2, $3, $4, 'queued')
     ON CONFLICT (phone, reminder_date)
     DO NOTHING
     RETURNING id
   `;
 
-  const { rows } = await query(sql, [
-    reminderId,
-    phone,
-    message,
-    reminderDate,
-    hasSendTime,
-    timezone,
-    sendAfterTime,
-  ]);
+  const { rows } = await query(sql, [reminderId, phone, message, reminderDate]);
   return rows[0] ? rows[0].id : null;
 }
 

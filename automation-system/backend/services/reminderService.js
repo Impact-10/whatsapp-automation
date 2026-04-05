@@ -4,49 +4,6 @@ const { buildReminderMessage, buildOverdueMessage } = require("./messageService"
 const { getMessageTemplate, getSetting } = require("./settingsService");
 const { enqueueMessage } = require("./queueService");
 
-function envBool(name, defaultValue = false) {
-  const raw = String(process.env[name] ?? "").trim().toLowerCase();
-  if (!raw) return defaultValue;
-  return ["1", "true", "yes", "on"].includes(raw);
-}
-
-function resolveTestSendTime() {
-  const raw = String(process.env.TEST_SEND_TIME || "").trim();
-  if (!raw) return null;
-
-  const m = raw.match(/^(\d{1,2}):(\d{2})$/);
-  if (!m) return null;
-
-  const hour = Number(m[1]);
-  const minute = Number(m[2]);
-  if (Number.isNaN(hour) || Number.isNaN(minute)) return null;
-  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
-
-  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
-}
-
-async function prepareTestDueNow() {
-  const tz = process.env.APP_TIMEZONE || "Asia/Kolkata";
-
-  // Force every reminder to be due today so full pipeline can be tested in one run.
-  await query(
-    `UPDATE reminders
-     SET next_due_date = (CURRENT_TIMESTAMP AT TIME ZONE $1)::DATE,
-         follow_up_count = 0,
-         visited = FALSE`,
-    [tz]
-  );
-
-  if (envBool("TEST_CLEAR_QUEUE_AND_TODAY_LOGS", false)) {
-    await query("DELETE FROM message_queue");
-    await query(
-      `DELETE FROM message_logs
-       WHERE DATE(sent_at AT TIME ZONE $1) = (CURRENT_TIMESTAMP AT TIME ZONE $1)::DATE`,
-      [tz]
-    );
-  }
-}
-
 async function upsertClient(name, phone) {
   const { rows } = await query(
     `INSERT INTO clients (name, phone) VALUES ($1, $2)
@@ -188,17 +145,11 @@ async function alreadySentSuccessfullyToday(phone) {
  * 5. After max follow-ups: auto-advance to next cycle
  */
 async function enqueueDueRemindersForToday() {
-  if (envBool("TEST_FORCE_DUE_TODAY", false)) {
-    await prepareTestDueNow();
-  }
-
   const dueRows = await getDueRemindersToday();
   const template = await getMessageTemplate();
   const overdueTemplate = await getSetting("overdue_message_template");
   const maxFollowUps = parseInt(await getSetting("max_follow_ups")) || 3;
   const followUpInterval = parseInt(await getSetting("follow_up_interval_days")) || 5;
-  const testSendTime = resolveTestSendTime();
-  const tz = process.env.APP_TIMEZONE || "Asia/Kolkata";
 
   // Group by phone for combined messages
   const byPhone = {};
@@ -274,8 +225,6 @@ async function enqueueDueRemindersForToday() {
       phone,
       message,
       reminderDate: new Date().toISOString().slice(0, 10),
-      sendAfterTime: testSendTime,
-      timezone: tz,
     });
 
     if (queueId) {
