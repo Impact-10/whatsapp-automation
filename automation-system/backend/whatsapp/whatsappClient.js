@@ -16,11 +16,47 @@ let backupIntervalRef = null;
 let initRecoveryAttempted = false;
 let initWatchdogRef = null;
 let initStallRecoveries = 0;
+let crashRecoveryInProgress = false;
 
 function clearInitWatchdog() {
   if (initWatchdogRef) {
     clearTimeout(initWatchdogRef);
     initWatchdogRef = null;
+  }
+}
+
+async function recoverFromCrash(trigger, details) {
+  if (crashRecoveryInProgress) return;
+  crashRecoveryInProgress = true;
+
+  logger.warn("WhatsApp crash recovery triggered.", { trigger, details });
+  ready = false;
+  reconnecting = true;
+  statusMessage = "recovering_after_browser_crash";
+
+  try {
+    clearInitWatchdog();
+    if (clientInstance) {
+      try {
+        await clientInstance.destroy();
+      } catch {
+        // no-op
+      }
+      clientInstance = null;
+    }
+
+    setTimeout(() => {
+      startWhatsAppClient().catch((error) => {
+        logger.error("Crash recovery restart failed.", { error: error.message });
+      }).finally(() => {
+        reconnecting = false;
+        crashRecoveryInProgress = false;
+      });
+    }, 1500);
+  } catch (error) {
+    reconnecting = false;
+    crashRecoveryInProgress = false;
+    logger.error("Crash recovery failed.", { error: error.message });
   }
 }
 
@@ -30,6 +66,17 @@ process.on("unhandledRejection", (reason) => {
     logger.warn("Suppressed EBUSY unhandled rejection during session backup.", { path: reason.path });
     return;
   }
+
+  const text = String(reason?.message || reason || "");
+  if (
+    text.includes("Target closed") ||
+    text.includes("Protocol error") ||
+    text.includes("Session closed")
+  ) {
+    recoverFromCrash("unhandledRejection", text).catch(() => {});
+    return;
+  }
+
   logger.error("Unhandled rejection.", { error: String(reason) });
 });
 
