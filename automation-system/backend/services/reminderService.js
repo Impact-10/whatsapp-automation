@@ -3,6 +3,32 @@ const logger = require("../utils/logger");
 const { buildReminderMessage, buildOverdueMessage } = require("./messageService");
 const { getMessageTemplate, getSetting } = require("./settingsService");
 const { enqueueMessage } = require("./queueService");
+const { listSheetRows, deleteSheetRow, normalizePhone } = require("./sheetsService");
+
+async function deleteMatchingSheetRows({ ownerName, phone, petName, vaccine }) {
+  const sheet = await listSheetRows();
+  const normalizedPhone = normalizePhone(phone || "");
+  const nameKey = String(ownerName || "").trim().toLowerCase();
+  const petKey = String(petName || "").trim().toLowerCase();
+  const vaccineKey = String(vaccine || "").trim().toLowerCase();
+
+  const matches = (sheet.rows || []).filter((row) => {
+    return (
+      normalizePhone(row.phone || "") === normalizedPhone &&
+      String(row.ownerName || "").trim().toLowerCase() === nameKey &&
+      String(row.petName || "").trim().toLowerCase() === petKey &&
+      String(row.vaccine || "").trim().toLowerCase() === vaccineKey
+    );
+  });
+
+  // Delete from bottom to top to avoid row-index shift while removing multiple matches.
+  matches.sort((a, b) => b.rowNumber - a.rowNumber);
+  for (const row of matches) {
+    await deleteSheetRow(row.rowNumber);
+  }
+
+  return matches.length;
+}
 
 async function upsertClient(name, phone) {
   const { rows } = await query(
@@ -340,14 +366,40 @@ async function getVisitHistory(reminderId) {
 }
 
 async function deleteReminder(reminderId) {
-  // Get pet_id before deleting so we can clean up orphan pets
+  // Get reminder details first so we can remove the matching source row from the sheet too.
   const { rows: reminderRows } = await query(
-    `SELECT pet_id FROM reminders WHERE id = $1`,
+    `SELECT
+       r.pet_id,
+       c.name AS owner_name,
+       c.phone,
+       p.pet_name,
+       r.vaccine
+     FROM reminders r
+     INNER JOIN pets p ON p.id = r.pet_id
+     INNER JOIN clients c ON c.id = p.client_id
+     WHERE r.id = $1`,
     [reminderId]
   );
   if (!reminderRows.length) return null;
 
-  const petId = reminderRows[0].pet_id;
+  const reminder = reminderRows[0];
+  const petId = reminder.pet_id;
+
+  let sheetRowsDeleted = 0;
+  try {
+    sheetRowsDeleted = await deleteMatchingSheetRows({
+      ownerName: reminder.owner_name,
+      phone: reminder.phone,
+      petName: reminder.pet_name,
+      vaccine: reminder.vaccine,
+    });
+  } catch (error) {
+    logger.warn("Failed to delete matching row from Google Sheet during reminder deletion.", {
+      reminderId,
+      error: error.message,
+    });
+  }
+
   await query(`DELETE FROM reminders WHERE id = $1`, [reminderId]);
 
   // Clean up orphan pet (no remaining reminders)
@@ -372,7 +424,7 @@ async function deleteReminder(reminderId) {
     }
   }
 
-  return { deleted: true };
+  return { deleted: true, sheetRowsDeleted };
 }
 
 async function getDashboardSummary() {
