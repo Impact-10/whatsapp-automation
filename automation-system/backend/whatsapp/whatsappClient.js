@@ -17,6 +17,7 @@ let initRecoveryAttempted = false;
 let initWatchdogRef = null;
 let initStallRecoveries = 0;
 let crashRecoveryInProgress = false;
+let whatsappDisabled = false;
 
 function clearInitWatchdog() {
   if (initWatchdogRef) {
@@ -297,6 +298,11 @@ function createClient() {
 }
 
 async function startWhatsAppClient() {
+  if (whatsappDisabled) {
+    statusMessage = "disabled_by_config";
+    return null;
+  }
+
   if (clientInstance) {
     return clientInstance;
   }
@@ -420,6 +426,10 @@ async function waitForQr(timeoutMs = 20000) {
 }
 
 async function reconnectWhatsAppSession() {
+  if (whatsappDisabled) {
+    return { ok: false, message: "WhatsApp is disabled by config on this instance." };
+  }
+
   if (reconnecting) {
     return { ok: false, message: "Reconnect already in progress." };
   }
@@ -456,12 +466,31 @@ async function reconnectWhatsAppSession() {
 }
 
 function getWhatsAppStatus() {
+  if (whatsappDisabled) {
+    return {
+      ready: false,
+      reconnecting: false,
+      statusMessage: "disabled_by_config",
+      hasQr: false,
+    };
+  }
+
   return {
     ready,
     reconnecting,
     statusMessage,
     hasQr: Boolean(latestQr),
   };
+}
+
+function setWhatsAppDisabled(disabled) {
+  whatsappDisabled = Boolean(disabled);
+  if (whatsappDisabled) {
+    latestQr = null;
+    ready = false;
+    reconnecting = false;
+    statusMessage = "disabled_by_config";
+  }
 }
 
 async function closeWhatsAppClient() {
@@ -487,4 +516,5 @@ module.exports = {
   getLatestQr,
   getWhatsAppStatus,
   reconnectWhatsAppSession,
+  setWhatsAppDisabled,
 };

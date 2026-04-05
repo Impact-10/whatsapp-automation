@@ -21,6 +21,12 @@ const { listSheetRows, appendSheetRow, deleteSheetRow } = require("../services/s
 const { authenticate } = require("./authenticate");
 const authRoutes = require("./authRoutes");
 
+function envBool(name, defaultValue) {
+  const raw = String(process.env[name] ?? "").trim().toLowerCase();
+  if (!raw) return defaultValue;
+  return ["1", "true", "yes", "on"].includes(raw);
+}
+
 function startApiServer() {
   const app = express();
 
@@ -254,7 +260,9 @@ function startApiServer() {
 
   app.post("/admin/run-now", wrap(async (_req, res) => {
     const pipeline = await runSyncAndQueueCycle();
-    await processQueueOnce();
+    if (envBool("ENABLE_WORKER", true)) {
+      await processQueueOnce();
+    }
     return res.json({ ok: true, pipeline });
   }));
 

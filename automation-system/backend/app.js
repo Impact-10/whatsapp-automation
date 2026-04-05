@@ -7,11 +7,17 @@ dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
 const logger = require("./utils/logger");
 const { initDatabase, closeDatabase } = require("./database/db");
-const { startWhatsAppClient, closeWhatsAppClient } = require("./whatsapp/whatsappClient");
+const { startWhatsAppClient, closeWhatsAppClient, setWhatsAppDisabled } = require("./whatsapp/whatsappClient");
 const { runSyncAndQueueCycle, scheduleDailyRun } = require("./scheduler/cronJobs");
 const { startMessageWorker, stopMessageWorker, processQueueOnce } = require("./worker/messageWorker");
 const { startApiServer } = require("./api/server");
 const { getLatestSessionInfo, isSessionBlobHealthy } = require("./services/sessionService");
+
+function envBool(name, defaultValue) {
+  const raw = String(process.env[name] ?? "").trim().toLowerCase();
+  if (!raw) return defaultValue;
+  return ["1", "true", "yes", "on"].includes(raw);
+}
 
 /**
  * Validate required environment variables before starting any services.
@@ -77,24 +83,48 @@ async function start() {
   await initDatabase();
   await ensureSeedAdmin();
 
-  await startWhatsAppClient();
+  const enableWhatsApp = envBool("ENABLE_WHATSAPP", true);
+  const enableWorker = envBool("ENABLE_WORKER", true);
+  const enableScheduler = envBool("ENABLE_SCHEDULER", true);
 
-  const session = await getLatestSessionInfo();
-  if (session && !isSessionBlobHealthy(session)) {
-    logger.warn("Persisted WhatsApp session payload looks too small; restore may fail on restart.", {
-      session_name: session.session_name,
-      bytes: session.bytes,
-      updated_at: session.updated_at,
-    });
+  setWhatsAppDisabled(!enableWhatsApp);
+
+  if (enableWhatsApp) {
+    await startWhatsAppClient();
+  } else {
+    logger.info("WhatsApp client disabled by config.", { ENABLE_WHATSAPP: false });
   }
 
-  startMessageWorker();
-  cronTask = scheduleDailyRun();
+  if (enableWhatsApp) {
+    const session = await getLatestSessionInfo();
+    if (session && !isSessionBlobHealthy(session)) {
+      logger.warn("Persisted WhatsApp session payload looks too small; restore may fail on restart.", {
+        session_name: session.session_name,
+        bytes: session.bytes,
+        updated_at: session.updated_at,
+      });
+    }
+  }
+
+  if (enableWorker) {
+    startMessageWorker();
+  } else {
+    logger.info("Queue worker disabled by config.", { ENABLE_WORKER: false });
+  }
+
+  if (enableScheduler) {
+    cronTask = scheduleDailyRun();
+  } else {
+    logger.info("Scheduler disabled by config.", { ENABLE_SCHEDULER: false });
+  }
+
   apiServer = startApiServer();
 
   if (process.argv.includes("--run-now")) {
     await runSyncAndQueueCycle();
-    await processQueueOnce();
+    if (enableWorker) {
+      await processQueueOnce();
+    }
     await shutdown(0);
     return;
   }
